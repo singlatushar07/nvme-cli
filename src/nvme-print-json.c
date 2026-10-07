@@ -2000,21 +2000,23 @@ static void json_pevent_entry(void *pevent_log_info, __u8 action, __u32 size, co
 			      __u32 offset, struct json_object *valid)
 {
 	int i;
+	__u32 ehl;
 	__u16 vsil, el;
 	struct nvme_persistent_event_log *pevent_log_head = pevent_log_info;
 	struct nvme_persistent_event_entry *pevent_entry_head;
 	struct json_object *valid_attrs;
 
 	for (i = 0; i < le32_to_cpu(pevent_log_head->tnev); i++) {
-		if (offset + sizeof(*pevent_entry_head) >= size)
+		if (size - offset < sizeof(*pevent_entry_head))
 			break;
 
 		pevent_entry_head = pevent_log_info + offset;
 		vsil = le16_to_cpu(pevent_entry_head->vsil);
 		el = le16_to_cpu(pevent_entry_head->el);
+		ehl = pevent_entry_head->ehl + 3;
 
-		if (offset + pevent_entry_head->ehl + 3 + el >=
-		    size)
+		if (ehl < sizeof(*pevent_entry_head) || vsil > el ||
+		    ehl + el > size - offset)
 			break;
 
 		valid_attrs = json_create_object();
@@ -2034,9 +2036,9 @@ static void json_pevent_entry(void *pevent_log_info, __u8 action, __u32 size, co
 
 		if (vsil)
 			obj_d(valid_attrs, "vs_info_bin",
-			      (void *)pevent_entry_head + 1, vsil, 16, 1);
+			      (void *)pevent_entry_head + ehl, vsil, 16, 1);
 
-		offset += pevent_entry_head->ehl + vsil + 3;
+		offset += ehl + vsil;
 
 		switch (pevent_entry_head->etype) {
 		case NVME_PEL_SMART_HEALTH_EVENT:
@@ -2097,7 +2099,8 @@ static void json_pevent_entry(void *pevent_log_info, __u8 action, __u32 size, co
 		}
 
 		array_add_obj(valid, valid_attrs);
-		offset += le16_to_cpu(pevent_entry_head->el);
+		/* EL includes the vendor information already skipped above. */
+		offset += el - vsil;
 	}
 }
 
