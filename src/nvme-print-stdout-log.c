@@ -244,7 +244,7 @@ void nvme_show_pel_event_header(int i,
 
 	if (vsil) {
 		printf("Vendor Specific Information:\n");
-		d((void *)hdr + 1, vsil, 16, 1);
+		d((void *)hdr + hdr->ehl + 3, vsil, 16, 1);
 	}
 }
 
@@ -646,6 +646,7 @@ void stdout_persistent_event_log(void *pevent_log_info, __u8 action, __u32 size,
 {
 	struct nvme_persistent_event_log *pevent_log_head;
 	__u32 offset = sizeof(*pevent_log_head);
+	__u32 ehl;
 	__u16 vsil, el;
 	struct nvme_persistent_event_entry *pevent_entry_head;
 	int verbose = stdout_print_ops.flags & VERBOSE;
@@ -674,19 +675,21 @@ void stdout_persistent_event_log(void *pevent_log_info, __u8 action, __u32 size,
 	printf("\n");
 	printf("\nPersistent Event Entries:\n");
 	for (int i = 0; i < le32_to_cpu(pevent_log_head->tnev); i++) {
-		if (offset + sizeof(*pevent_entry_head) >= size)
+		if (size - offset < sizeof(*pevent_entry_head))
 			break;
 
 		pevent_entry_head = pevent_log_info + offset;
 		vsil = le16_to_cpu(pevent_entry_head->vsil);
 		el = le16_to_cpu(pevent_entry_head->el);
+		ehl = pevent_entry_head->ehl + 3;
 
-		if ((offset + pevent_entry_head->ehl + 3 + el) >= size)
+		if (ehl < sizeof(*pevent_entry_head) || vsil > el ||
+		    ehl + el > size - offset)
 			break;
 
 		nvme_show_pel_event_header(i, pevent_entry_head, verbose);
 
-		offset += pevent_entry_head->ehl + vsil + 3;
+		offset += ehl + vsil;
 
 		switch (pevent_entry_head->etype) {
 		case NVME_PEL_SMART_HEALTH_EVENT:
@@ -752,7 +755,8 @@ void stdout_persistent_event_log(void *pevent_log_info, __u8 action, __u32 size,
 			printf("Reserved Event\n\n");
 			break;
 		}
-		offset += el;
+		/* EL includes the vendor information already skipped above. */
+		offset += el - vsil;
 		printf("\n");
 	}
 }

@@ -105,6 +105,14 @@ if python3.found()
              args: [files('nvme_init_pi_tags_test.py'), nvme_exe, mock_nvme_lib],
              env: cli_test_env,
              depends: [nvme_exe, mock_nvme_lib])
+
+        if json_c_dep.found() and 'log' in selected_plugins
+            test('nvme-cli - persistent-event-mock-cli',
+                 python3,
+                 args: [files('nvme_persistent_event_mock_test.py'), nvme_exe, mock_nvme_lib],
+                 env: cli_test_env,
+                 depends: [nvme_exe, mock_nvme_lib])
+        endif
     endif
 
     if 'ocp' in selected_plugins
